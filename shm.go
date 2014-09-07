@@ -1,0 +1,140 @@
+package main
+
+/*
+#cgo pkg-config: wayland-server
+
+#include <wayland-server.h>
+
+*/
+import "C"
+
+import (
+	_ "syscall"
+	"unsafe"
+)
+
+type Pool struct {
+	client    *C.struct_wl_client
+	id        int
+	destroyFn *CFn
+}
+
+func (pool *Pool) get_destroy_func() unsafe.Pointer {
+	if pool.destroyFn == nil {
+		pool.destroyFn = create_func(
+			func(resource *C.struct_wl_resource) {
+				id := C.wl_resource_get_id(resource)
+				delete(pools, int(id))
+			},
+		)
+	}
+
+	return pool.destroyFn.fn_ptr
+}
+
+var pools = make(map[int]*Pool)
+
+var create_pool = create_func(
+	func(client *C.struct_wl_client,
+		resource *C.struct_wl_resource,
+		id C.uint32_t,
+		fd C.int32_t,
+		size C.int32_t) {
+
+		println("creata_pool")
+
+		pool_res := C.wl_resource_create(
+			client,
+			&C.wl_shm_pool_interface,
+			(C.wl_resource_get_version(resource)),
+			id,
+		)
+
+		pool := Pool{client: client, id: int(id)}
+		pools[int(id)] = &pool
+
+		C.wl_resource_set_implementation(pool_res,
+			(unsafe.Pointer)(&shm_pool_impl),
+			unsafe.Pointer(&pool),
+			cPtr(pool.get_destroy_func()))
+
+	},
+)
+
+var create_buffer = create_func(
+	func(client *C.struct_wl_client,
+		resource *C.struct_wl_resource,
+		id C.uint32_t,
+		offset C.int32_t,
+		width C.int32_t,
+		height C.int32_t,
+		stride C.int32_t,
+		format C.uint32_t) {
+
+		C.wl_resource_create(
+			client,
+			&C.wl_buffer_interface,
+			(C.wl_resource_get_version(resource)),
+			id,
+		)
+
+	},
+)
+
+var destroy = create_func(
+	func(client *C.struct_wl_client,
+		resource *C.struct_wl_resource) {
+		println("destroy")
+		C.wl_resource_destroy(resource)
+	},
+)
+
+var resize = create_func(
+	func(client *C.struct_wl_client,
+		resource *C.struct_wl_resource,
+		size C.int32_t) {
+		println("resize")
+	},
+)
+
+var shm_impl = C.struct_wl_shm_interface{
+	create_pool: (cPtr)(create_pool.fn_ptr),
+}
+
+var shm_pool_impl = C.struct_wl_shm_pool_interface{
+	create_buffer: (cPtr)(create_buffer.fn_ptr),
+	destroy:       (cPtr)(destroy.fn_ptr),
+	resize:        (cPtr)(resize.fn_ptr),
+}
+
+var bind_shm = create_func(
+
+	func(client *C.struct_wl_client, data unsafe.Pointer,
+		version C.int, id C.uint32_t) {
+
+		if version >= 1 {
+			version = 1
+		}
+
+		println("shm", int(id))
+
+		resource := C.wl_resource_create(client, &C.wl_shm_interface, version, id)
+		C.wl_resource_set_implementation(resource,
+			(unsafe.Pointer)(&shm_impl),
+			nil,
+			nil)
+
+		C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_XRGB8888)
+		C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_ARGB8888)
+
+	},
+)
+
+func shmInit(display *C.struct_wl_display) {
+
+	C.wl_global_create(display,
+		&C.wl_shm_interface,
+		1,
+		nil,
+		cPtr(bind_shm.fn_ptr))
+}
