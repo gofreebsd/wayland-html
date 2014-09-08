@@ -53,10 +53,14 @@ var create_pool = create_func(
 		pool := Pool{client: client, id: int(id)}
 		pools[int(id)] = &pool
 
+		// C.wl_resource_set_implementation(pool_res,
+		// 	(unsafe.Pointer)(&shm_pool_impl),
+		// 	unsafe.Pointer(&pool),
+		// 	cPtr(pool.get_destroy_func()))
 		C.wl_resource_set_implementation(pool_res,
 			(unsafe.Pointer)(&shm_pool_impl),
 			unsafe.Pointer(&pool),
-			cPtr(pool.get_destroy_func()))
+			nil)
 
 	},
 )
@@ -71,13 +75,17 @@ var create_buffer = create_func(
 		stride C.int32_t,
 		format C.uint32_t) {
 
-		C.wl_resource_create(
+			buffer := C.wl_resource_create(
 			client,
 			&C.wl_buffer_interface,
 			(C.wl_resource_get_version(resource)),
 			id,
 		)
 
+		C.wl_resource_set_implementation(buffer,
+			(unsafe.Pointer)(&buffer_impl),
+			nil,
+			nil)
 	},
 )
 
@@ -97,6 +105,14 @@ var resize = create_func(
 	},
 )
 
+var buffer_destroy = create_func(
+	func(client *C.struct_wl_client,
+		resource *C.struct_wl_resource) {
+		println("buffer_destroy")
+		C.wl_resource_destroy(resource)
+	},
+)
+
 var shm_impl = C.struct_wl_shm_interface{
 	create_pool: (cPtr)(create_pool.fn_ptr),
 }
@@ -105,6 +121,10 @@ var shm_pool_impl = C.struct_wl_shm_pool_interface{
 	create_buffer: (cPtr)(create_buffer.fn_ptr),
 	destroy:       (cPtr)(destroy.fn_ptr),
 	resize:        (cPtr)(resize.fn_ptr),
+}
+
+var buffer_impl = C.struct_wl_buffer_interface{
+	destroy: (cPtr)(buffer_destroy.fn_ptr),
 }
 
 var bind_shm = create_func(

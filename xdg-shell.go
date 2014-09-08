@@ -127,7 +127,7 @@ var xdg_surface_impl = C.struct_xdg_surface_interface{
 	set_margin:           (cPtr)(xdg_surface_set_margin.fn_ptr),
 	set_title:            (cPtr)(xdg_surface_set_title.fn_ptr),
 	set_app_id:           (cPtr)(xdg_surface_set_app_id.fn_ptr),
-	move:                 (cPtr)(xdg_surface_set_title.fn_ptr),
+	move:                 (cPtr)(xdg_surface_move.fn_ptr),
 	resize:               (cPtr)(xdg_surface_resize.fn_ptr),
 	set_output:           (cPtr)(xdg_surface_set_output.fn_ptr),
 	request_change_state: (cPtr)(xdg_surface_request_change_state.fn_ptr),

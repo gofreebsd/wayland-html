@@ -16,27 +16,25 @@ package main
 import "C"
 
 import (
-	"os"
-	// "reflect"
 	"fmt"
+	"github.com/go-martini/martini"
+	"github.com/martini-contrib/render"
+	"strconv"
 )
-
 
 var display *C.struct_wl_display
 var event_loop *C.struct_wl_event_loop
 
-func main() {
-
+func wayland() {
 	display = C.wl_display_create()
 
 	if display == nil {
-		os.Exit(1)
+		return
 	}
 
 	if C.wl_display_add_socket(display, nil) != 0 {
-		os.Exit(1)
+		return
 	}
-
 
 	compositorInit(display)
 
@@ -48,7 +46,7 @@ func main() {
 
 	xdgShellInit(display)
 
-    event_loop = C.wl_display_get_event_loop(display);
+	event_loop = C.wl_display_get_event_loop(display)
 
 	fmt.Println("Wayland chrome")
 	println("start running...")
@@ -56,7 +54,19 @@ func main() {
 	C.wl_display_run(display)
 
 	C.wl_display_destroy(display)
+}
 
-	os.Exit(0)
+func main() {
 
+	go wayland()
+
+	server := martini.Classic()
+
+	server.Use(render.Renderer())
+
+	server.Get("/", func(r render.Render) {
+		r.HTML(200, "index", strconv.Itoa(len(compositors)))
+	})
+
+	server.Run()
 }

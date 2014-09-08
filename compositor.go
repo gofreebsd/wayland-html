@@ -13,15 +13,29 @@ import (
 
 var new_surface_signal C.struct_wl_signal
 
+var surface_destroy = create_func(
+	func(client *C.struct_wl_client,
+		resource *C.struct_wl_resource) {
+		println("surface_destroy")
+		C.wl_resource_destroy(resource)
+	},
+)
+
 var attach = create_func(
-	get_echo("attach"),
+	func(client *C.struct_wl_client,
+		resource *C.struct_wl_resource,
+		buffer *C.struct_wl_resource,
+		x C.int32_t,
+		y C.int32_t) {
+		C.wl_buffer_send_release(buffer)
+	},
 )
 
 var damage = create_func(
 	get_echo("damage"),
 )
 
-var frame_cbs  *C.struct_wl_resource
+var frame_cbs *C.struct_wl_resource
 
 var frame = create_func(
 	func(client *C.struct_wl_client,
@@ -32,6 +46,7 @@ var frame = create_func(
 		callback_resource := C.wl_resource_create(client,
 			&C.wl_callback_interface,
 			1, id)
+
 		C.wl_resource_set_implementation(callback_resource,
 			nil, nil, nil)
 
@@ -43,17 +58,18 @@ var frame = create_func(
 var commit = create_func(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource) {
-			println("commit")
-			C.wl_callback_send_done(frame_cbs, 1)
-			C.wl_resource_destroy(frame_cbs)
+		println("commit")
+		C.wl_callback_send_done(frame_cbs, 1)
+		C.wl_resource_destroy(frame_cbs)
 	},
 )
 
 var surface_impl = C.struct_wl_surface_interface{
-	attach: cPtr(attach.fn_ptr),
-	damage: cPtr(damage.fn_ptr),
-	frame:  cPtr(frame.fn_ptr),
-	commit: cPtr(commit.fn_ptr),
+	destroy: cPtr(surface_destroy.fn_ptr),
+	attach:  cPtr(attach.fn_ptr),
+	damage:  cPtr(damage.fn_ptr),
+	frame:   cPtr(frame.fn_ptr),
+	commit:  cPtr(commit.fn_ptr),
 }
 
 var create_surface = create_func(
@@ -87,6 +103,13 @@ var compositor_impl = C.struct_wl_compositor_interface{
 	create_region:  (cPtr)(create_region.fn_ptr),
 }
 
+type Compositor struct {
+}
+
+var compositors = make(map[*C.struct_wl_client]*Compositor)
+
+var compositor_cleans = make(map[*C.struct_wl_client]*CFn)
+
 var bind_compositor = create_func(
 	func(client *C.struct_wl_client, data unsafe.Pointer,
 		version C.int, id C.uint32_t) {
@@ -97,9 +120,18 @@ var bind_compositor = create_func(
 
 		resource := C.wl_resource_create(client, &C.wl_compositor_interface, version, id)
 
+		compositors[client] = new(Compositor)
+		compositor_cleans[client] = create_func(
+			func(resource *C.struct_wl_resource) {
+				delete(compositors, client)
+				delete(compositor_cleans, client)
+			},
+		)
+
 		C.wl_resource_set_implementation(resource,
 			(unsafe.Pointer)(&compositor_impl),
-			data, nil)
+			unsafe.Pointer(compositors[client]),
+			cPtr(compositor_cleans[client].fn_ptr))
 	},
 )
 

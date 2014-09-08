@@ -16,6 +16,7 @@ import "C"
 
 import (
 	"reflect"
+	"runtime"
 	"unsafe"
 )
 
@@ -107,7 +108,7 @@ func (func_data *FuncData) Call(args unsafe.Pointer, ret unsafe.Pointer) {
 
 type CFn struct {
 	closure unsafe.Pointer
-	cif C.ffi_cif
+	cif     C.ffi_cif
 
 	fn_ptr  unsafe.Pointer
 	fn_data *FuncData
@@ -179,6 +180,8 @@ func create_func(f interface{}) *CFn {
 
 	cfn.closure = closure
 
+	runtime.SetFinalizer(cfn, free_cfn)
+
 	fn_data := new(FuncData)
 
 	fn_data.fn = reflect.ValueOf(f)
@@ -222,6 +225,8 @@ func create_func(f interface{}) *CFn {
 
 }
 
-func free_func(closure unsafe.Pointer) {
-	C.ffi_closure_free(closure)
+
+func free_cfn(cfn *CFn) {
+	C.ffi_closure_free(cfn.closure)
 }
+
