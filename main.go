@@ -1,72 +1,70 @@
 package main
 
-/*
-#cgo pkg-config: wayland-server
-
-#include <wayland-server.h>
-#include <sys/types.h>
-#include <pwd.h>
-#include <stdlib.h>
-#include <stdio.h>
-
-#include <ffi.h>
-
-
-*/
 import "C"
 
 import (
-	"fmt"
+	"code.google.com/p/go.net/websocket"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/render"
-	"strconv"
 )
 
-var display *C.struct_wl_display
-var event_loop *C.struct_wl_event_loop
+func http() {
+	server := martini.Classic()
 
-func wayland() {
-	display = C.wl_display_create()
+	server.Use(martini.Static("public", martini.StaticOptions{
+		Prefix: "public",
+	}))
 
-	if display == nil {
-		return
-	}
+	server.Use(martini.Static("bower_components", martini.StaticOptions{
+		Prefix: "bower_components",
+	}))
 
-	if C.wl_display_add_socket(display, nil) != 0 {
-		return
-	}
+	server.Use(render.Renderer(render.Options{
+		Extensions: []string{".tmpl", ".html"},
+		Delims: render.Delims{"{[{", "}]}"},
+	}))
 
-	compositorInit(display)
+	server.Get("/", func(r render.Render) {
+		r.HTML(200, "index", nil)
+	})
 
-	shmInit(display)
+	//
+	server.Get("/clients/:pid", func(params martini.Params, r render.Render) {
+		r.HTML(200, "index", params["pid"])
+	})
 
-	seatInit(display)
+	type jd map[string]interface{}
+	type ja []interface{}
 
-	shellInit(display)
+	// json api
+	server.Get("/api/clients", func(r render.Render) {
+		client_info := ja{}
 
-	xdgShellInit(display)
+		for _, c := range compositors {
+			client_info = append(client_info, jd{
+				"pid": c.Pid,
+			})
+		}
 
-	event_loop = C.wl_display_get_event_loop(display)
+		r.JSON(200, client_info)
+	})
 
-	fmt.Println("Wayland chrome")
-	println("start running...")
+	// websocket api
 
-	C.wl_display_run(display)
+	server.Get("/api/clients", websocket.Handler(func(ws *websocket.Conn) {
 
-	C.wl_display_destroy(display)
+	}).ServeHTTP)
+
+	server.Get("/api/clients/:pid", websocket.Handler(func(ws *websocket.Conn) {
+
+	}).ServeHTTP)
+
+	server.Run()
 }
 
 func main() {
 
-	go wayland()
+	go http()
 
-	server := martini.Classic()
-
-	server.Use(render.Renderer())
-
-	server.Get("/", func(r render.Render) {
-		r.HTML(200, "index", strconv.Itoa(len(compositors)))
-	})
-
-	server.Run()
+	wayland()
 }

@@ -1,0 +1,28 @@
+<link rel="import" href="/bower_components/polymer/polymer.html">
+
+<link rel="import" href="/bower_components/core-ajax/core-ajax.html">
+
+<polymer-element name="client-data" attributes="clients">
+  <template>
+    <core-ajax id="ajax"
+       auto
+       url="/api/clients"
+       handleAs="json"
+       on-core-response="{{postsLoaded}}"
+       >
+    </core-ajax>
+  </template>
+
+  <script>
+    Polymer({
+      created: function() {
+        this.clients = [];
+      },
+      postsLoaded: function() {
+        // Make a copy of the loaded data
+        this.clients = this.$.ajax.response.slice(0);
+      },
+    });
+  </script>
+
+</polymer-element>

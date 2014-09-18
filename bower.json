@@ -1,0 +1,22 @@
+{
+  "name": "wayland-html",
+  "version": "0.1.0",
+  "authors": [
+    "fangyuanziti <tiziyuanfang@gmail.com>"
+  ],
+  "description": "wayland using html as backend",
+  "main": "main.go",
+  "keywords": [
+    "wayland",
+    "html"
+  ],
+  "license": "MIT",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}

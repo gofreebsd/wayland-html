@@ -75,9 +75,6 @@ var surface_impl = C.struct_wl_surface_interface{
 var create_surface = create_func(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource, id C.uint32_t) {
-		var pid C.pid_t
-
-		C.wl_client_get_credentials(client, &pid, nil, nil)
 
 		surface_res := C.wl_resource_create(client, &C.wl_surface_interface,
 			C.wl_resource_get_version(resource), id)
@@ -86,7 +83,6 @@ var create_surface = create_func(
 			(unsafe.Pointer)(&surface_impl),
 			nil, nil)
 
-		println("surface", pid)
 		C.wl_signal_emit(&new_surface_signal, (unsafe.Pointer)(surface_res))
 	},
 )
@@ -104,6 +100,7 @@ var compositor_impl = C.struct_wl_compositor_interface{
 }
 
 type Compositor struct {
+	Pid int
 }
 
 var compositors = make(map[*C.struct_wl_client]*Compositor)
@@ -127,6 +124,10 @@ var bind_compositor = create_func(
 				delete(compositor_cleans, client)
 			},
 		)
+
+		var pid C.pid_t
+		C.wl_client_get_credentials(client, &pid, nil, nil)
+		compositors[client].Pid = int(pid)
 
 		C.wl_resource_set_implementation(resource,
 			(unsafe.Pointer)(&compositor_impl),
