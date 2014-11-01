@@ -9,7 +9,8 @@ package main
 import "C"
 
 import (
-	_ "syscall"
+	"fmt"
+	"syscall"
 	"unsafe"
 )
 
@@ -17,6 +18,8 @@ type Pool struct {
 	client    *C.struct_wl_client
 	id        int
 	destroyFn *CFn
+	fd        int
+	ptr       []byte
 }
 
 func (pool *Pool) get_destroy_func() unsafe.Pointer {
@@ -50,7 +53,21 @@ var create_pool = create_func(
 			id,
 		)
 
-		pool := Pool{client: client, id: int(id)}
+		mmap_ptr, err := syscall.Mmap(
+			int(fd), 0,
+			int(size),
+			syscall.PROT_READ|syscall.PROT_WRITE,
+			syscall.MAP_SHARED,
+		)
+
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		pool := Pool{client: client, id: int(id),
+			fd: int(fd), ptr: mmap_ptr,
+		}
+
 		pools[int(id)] = &pool
 
 		// C.wl_resource_set_implementation(pool_res,
@@ -65,6 +82,17 @@ var create_pool = create_func(
 	},
 )
 
+type Buffer struct {
+	offset int
+	width  int
+	height int
+	stride int
+	format uint
+	pool   *Pool
+}
+
+var buffers = make(map[*C.struct_wl_resource]*Buffer)
+
 var create_buffer = create_func(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource,
@@ -75,16 +103,29 @@ var create_buffer = create_func(
 		stride C.int32_t,
 		format C.uint32_t) {
 
-			buffer := C.wl_resource_create(
+		buffer := C.wl_resource_create(
 			client,
 			&C.wl_buffer_interface,
 			(C.wl_resource_get_version(resource)),
 			id,
 		)
 
+		pool := (*Pool)(C.wl_resource_get_user_data(resource))
+
+		buffer_data := Buffer{
+			offset: int(offset),
+			width:  int(width),
+			height: int(height),
+			stride: int(stride),
+			format: uint(offset),
+			pool:   pool,
+		}
+
+		buffers[buffer] = &buffer_data
+
 		C.wl_resource_set_implementation(buffer,
 			(unsafe.Pointer)(&buffer_impl),
-			nil,
+			unsafe.Pointer(&buffer_data),
 			nil)
 	},
 )
@@ -144,6 +185,7 @@ var bind_shm = create_func(
 			nil,
 			nil)
 
+		C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_RGBA8888)
 		C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_XRGB8888)
 		C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_ARGB8888)
 

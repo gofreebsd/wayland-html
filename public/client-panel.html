@@ -1,0 +1,177 @@
+<link rel="import" href="/bower_components/polymer/polymer.html">
+<script src="/public/webgl-utils.js"></script>
+
+
+<polymer-element name="client-panel" attributes="client">
+  <template>
+    <div> {{client.pid}} </div>
+    <canvas id="glcanvas" width="320" height="320"></canvas>
+    <!-- vertex shader -->
+    <script id="vertex_shader" type="x-shader/x-vertex">
+      attribute vec2 a_position;
+      attribute vec2 a_texCoord;
+
+      uniform vec2 u_resolution;
+
+      varying vec2 v_texCoord;
+
+      void main() {
+      // convert the rectangle from pixels to 0.0 to 1.0
+      vec2 zeroToOne = a_position / u_resolution;
+
+      // convert from 0->1 to 0->2
+      vec2 zeroToTwo = zeroToOne * 2.0;
+
+      // convert from 0->2 to -1->+1 (clipspace)
+      vec2 clipSpace = zeroToTwo - 1.0;
+
+      gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
+
+      // pass the texCoord to the fragment shader
+      // The GPU will interpolate this value between points.
+      v_texCoord = a_texCoord;
+      }
+    </script>
+    <!-- fragment shader -->
+    <script id="fragment_shader" type="x-shader/x-fragment">
+      precision mediump float;
+
+      // our texture
+      uniform sampler2D u_image;
+
+      // the texCoords passed in from the vertex shader.
+      varying vec2 v_texCoord;
+
+      void main() {
+      gl_FragColor = texture2D(u_image, v_texCoord);
+      }
+    </script>
+  </template>
+  <script>
+    function setRectangle(gl, x, y, width, height) {
+      var x1 = x;
+      var x2 = x + width;
+      var y1 = y;
+      var y2 = y + height;
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+         x1, y1,
+         x2, y1,
+         x1, y2,
+         x1, y2,
+         x2, y1,
+         x2, y2]), gl.STATIC_DRAW);
+    }
+
+    Polymer({
+      ready: function() {
+        console.log("hello2");
+        this.buffer = this.client.ss[0].CommitBuffer;
+      },
+
+     domReady: function (){
+        console.log("hello");
+        this.gl = this.initWebGL(this.$.glcanvas);
+        var gl = this.gl;
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+        gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+        var image = new Image();
+        var glcanvas = this.$.glcanvas;
+        var render = this.render;
+        // setup a GLSL program
+        var vertexShader = createShaderFromScriptElement(gl, this.$.vertex_shader);
+        var fragmentShader = createShaderFromScriptElement(gl, this.$.fragment_shader);
+        var program = createProgram(gl, [vertexShader, fragmentShader]);
+
+        render(gl, this.buffer,glcanvas, program);
+     },
+      render: function(gl, image, canvas, program) {
+
+        gl.useProgram(program);
+
+        // look up where the vertex data needs to go.
+        var positionLocation = gl.getAttribLocation(program, "a_position");
+        var texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
+
+        // provide texture coordinates for the rectangle.
+        var texCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            0.0,  0.0,
+            1.0,  0.0,
+            0.0,  1.0,
+            0.0,  1.0,
+            1.0,  0.0,
+            1.0,  1.0]), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(texCoordLocation);
+        gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+
+        // Create a texture.
+        var texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+
+        // Set the parameters so we can render any size image.
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        var pixels = new Uint8Array(16*16*4); // 16x16 RGBA image
+
+        function str2ab(str) {
+          var bufView = new Uint8Array(str.length);
+          for (var i=0, strLen=str.length; i < strLen; i++) {
+            bufView[i] = str.charCodeAt(i);
+          }
+          return bufView;
+        }
+
+        buffer = str2ab(atob(image));
+        console.log(buffer.length);
+        console.log(buffer)
+
+        gl.texImage2D(
+          gl.TEXTURE_2D, // target
+          0, // mip level
+          gl.RGBA, // internal format
+          250, 250, // width and height
+          0, // border
+          gl.RGBA, //format
+          gl.UNSIGNED_BYTE, // type
+          buffer
+        );
+
+        // lookup uniforms
+        var resolutionLocation = gl.getUniformLocation(program, "u_resolution");
+
+        // set the resolution
+        gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
+
+        // Create a buffer for the position of the rectangle corners.
+        var buffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.enableVertexAttribArray(positionLocation);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+        // Set a rectangle the same size as the image.
+        setRectangle(gl, 0, 0, 250, 250);
+
+        // Draw the rectangle.
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      },
+      initWebGL: function initWebGL(canvas) {
+        this.gl = null;
+        
+        try {
+          this.gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        }
+        catch(e) {}
+        
+        if (!this.gl) {
+          console.log("Unable to initialize WebGL. Your browser may not support it.");
+        }
+        return this.gl;
+      },
+    });
+  </script>
+</polymer-element>

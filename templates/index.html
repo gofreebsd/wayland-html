@@ -4,14 +4,17 @@
   <head>
     <title>Wayland Client</title>
     <script src="/bower_components/platform/platform.js"></script>
-    <link rel="import" href="/public/client-data.html">
+    <link rel="import" href="/public/clients-catagory.html">
   </head>
   <body>
     <template is="auto-binding">
-      <client-data clients="{{clients}}"> </client-data>
+      <!-- <client-data clients="{{clients}}"> </client-data> -->
 
-      <template repeat="{{client in clients}}">
-        <div> {{client.pid}} </div>
+      <!-- <template repeat="{{client in clients}}"> -->
+      <!--   <div> {{client.pid}} </div> -->
+      <!--   <img></img> -->
+      <clients-catagory></clients-catagory>
+
       </template>
     </template>
   </body>

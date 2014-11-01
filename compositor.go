@@ -8,8 +8,23 @@ package main
 import "C"
 
 import (
+	"bytes"
+	_ "fmt"
+	"reflect"
+	_ "time"
 	"unsafe"
 )
+
+type Surface struct {
+	pendingBuffer *C.struct_wl_resource
+	frame_cbs     []*C.struct_wl_resource
+	CommitBuffer  []byte
+}
+
+type Compositor struct {
+	Pid      int
+	Surfaces map[*C.struct_wl_resource]*Surface
+}
 
 var new_surface_signal C.struct_wl_signal
 
@@ -27,7 +42,11 @@ var attach = create_func(
 		buffer *C.struct_wl_resource,
 		x C.int32_t,
 		y C.int32_t) {
-		C.wl_buffer_send_release(buffer)
+
+		println("attach")
+
+		surface := compositors[client].Surfaces[resource]
+		surface.pendingBuffer = buffer
 	},
 )
 
@@ -35,14 +54,13 @@ var damage = create_func(
 	get_echo("damage"),
 )
 
-var frame_cbs *C.struct_wl_resource
-
 var frame = create_func(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource,
 		id C.uint32_t) {
 
 		println("frame")
+
 		callback_resource := C.wl_resource_create(client,
 			&C.wl_callback_interface,
 			1, id)
@@ -50,17 +68,66 @@ var frame = create_func(
 		C.wl_resource_set_implementation(callback_resource,
 			nil, nil, nil)
 
-		frame_cbs = callback_resource
+		surface := compositors[client].Surfaces[resource]
+
+		surface.frame_cbs = append(surface.frame_cbs, callback_resource)
 
 	},
 )
 
+func argbToRgba(buf []byte) []byte {
+	// new_buffer := make([]byte, len(buffer))
+	buffer := bytes.NewBuffer(buf)
+	new_buffer := new(bytes.Buffer)
+
+	read_buffer := make([]byte, 4)
+	convert_buffer := make([]byte, 4)
+
+	for {
+		_, err := buffer.Read(read_buffer)
+
+		if err != nil {
+			break
+		}
+
+		convert_buffer[0] = read_buffer[2]
+		convert_buffer[1] = read_buffer[1]
+		convert_buffer[2] = read_buffer[0]
+		convert_buffer[3] = read_buffer[3]
+
+		new_buffer.Write(convert_buffer)
+
+	}
+
+	return new_buffer.Bytes()
+}
+
 var commit = create_func(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource) {
-		println("commit")
-		C.wl_callback_send_done(frame_cbs, 1)
-		C.wl_resource_destroy(frame_cbs)
+
+		compositor := compositors[client]
+		surface := compositor.Surfaces[resource]
+
+		// use pending buffer
+		println(
+			buffers[surface.pendingBuffer].offset,
+			buffers[surface.pendingBuffer].width,
+			buffers[surface.pendingBuffer].height,
+			buffers[surface.pendingBuffer].stride,
+			buffers[surface.pendingBuffer].format,
+		)
+
+		pendingBuffer := buffers[surface.pendingBuffer]
+		size := pendingBuffer.height * pendingBuffer.stride
+
+		var commitBuffer = make([]byte, size)
+		copy(commitBuffer, pendingBuffer.pool.ptr[pendingBuffer.offset:])
+		surface.CommitBuffer = argbToRgba(commitBuffer)
+
+		// release pending buffer
+		C.wl_buffer_send_release(surface.pendingBuffer)
+
 	},
 )
 
@@ -79,9 +146,15 @@ var create_surface = create_func(
 		surface_res := C.wl_resource_create(client, &C.wl_surface_interface,
 			C.wl_resource_get_version(resource), id)
 
+		compositor := compositors[client]
+
+		surface := new(Surface)
+
+		compositor.Surfaces[surface_res] = surface
+
 		C.wl_resource_set_implementation(surface_res,
 			(unsafe.Pointer)(&surface_impl),
-			nil, nil)
+			(unsafe.Pointer)(surface), nil)
 
 		C.wl_signal_emit(&new_surface_signal, (unsafe.Pointer)(surface_res))
 	},
@@ -99,13 +172,18 @@ var compositor_impl = C.struct_wl_compositor_interface{
 	create_region:  (cPtr)(create_region.fn_ptr),
 }
 
-type Compositor struct {
-	Pid int
+func (c *Compositor) resetFrameCallback() {
+	for _, s := range c.Surfaces {
+		for _, cb := range s.frame_cbs {
+			C.wl_callback_send_done(cb, 1)
+			C.wl_resource_destroy(cb)
+		}
+
+		s.frame_cbs = []*C.struct_wl_resource{}
+	}
 }
 
 var compositors = make(map[*C.struct_wl_client]*Compositor)
-
-var compositor_cleans = make(map[*C.struct_wl_client]*CFn)
 
 var bind_compositor = create_func(
 	func(client *C.struct_wl_client, data unsafe.Pointer,
@@ -117,24 +195,85 @@ var bind_compositor = create_func(
 
 		resource := C.wl_resource_create(client, &C.wl_compositor_interface, version, id)
 
+		timer := NewRepeatTimer()
+
 		compositors[client] = new(Compositor)
-		compositor_cleans[client] = create_func(
+
+		destroy := once_func(
 			func(resource *C.struct_wl_resource) {
 				delete(compositors, client)
-				delete(compositor_cleans, client)
+				// delete(compositor_cleans, client)
+				timer.stop()
 			},
 		)
 
 		var pid C.pid_t
 		C.wl_client_get_credentials(client, &pid, nil, nil)
 		compositors[client].Pid = int(pid)
+		compositors[client].Surfaces = make(map[*C.struct_wl_resource]*Surface)
 
 		C.wl_resource_set_implementation(resource,
-			(unsafe.Pointer)(&compositor_impl),
+			unsafe.Pointer(&compositor_impl),
 			unsafe.Pointer(compositors[client]),
-			cPtr(compositor_cleans[client].fn_ptr))
+			cPtr(destroy.fn_ptr))
+
+		timer.start(compositors[client])
 	},
 )
+
+var once_funcs = make(map[*interface{}]*CFn)
+
+func once_func(f interface{}) *CFn {
+
+	var wrapperFn interface{}
+
+	wrapperFn = reflect.MakeFunc(
+		reflect.TypeOf(f),
+		func(args []reflect.Value) (results []reflect.Value) {
+			results = reflect.ValueOf(f).Call(args)
+
+			if &wrapperFn != nil {
+				delete(once_funcs, &wrapperFn)
+			}
+
+			return
+		},
+	).Interface()
+
+	cfn := create_func(wrapperFn)
+
+	once_funcs[&wrapperFn] = cfn
+
+	return cfn
+}
+
+type RepeatTimer struct {
+	timer   *C.struct_wl_event_source
+	is_stop bool
+}
+
+func NewRepeatTimer() *RepeatTimer {
+	ret := new(RepeatTimer)
+	ret.is_stop = false
+	return ret
+}
+
+func (t *RepeatTimer) stop() {
+	t.is_stop = true
+}
+
+func (t *RepeatTimer) start(compositor *Compositor) {
+	timer_tick := once_func(func() {
+		if !t.is_stop {
+			println("timer", compositor)
+			compositor.resetFrameCallback()
+			t.start(compositor)
+		}
+	})
+
+	t.timer = C.wl_event_loop_add_timer(event_loop, cPtr(timer_tick.fn_ptr), nil)
+	C.wl_event_source_timer_update(t.timer, 3*1000)
+}
 
 func compositorInit(display *C.struct_wl_display) {
 

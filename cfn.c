@@ -8,8 +8,6 @@ void puts_binding(ffi_cif *cif, unsigned int *ret, void* args[],
 }
 
 void binding(ffi_cif *cif, unsigned int *ret, void **args, void *data) {
-    /* printf("%s\n", *((char **)(args[0]))); */
-    /* printf("%d\n", *((int *)(args[1]))); */
     cfn_go_callback(data, args, ret);
 }
 

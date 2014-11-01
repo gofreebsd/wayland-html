@@ -1,0 +1,19 @@
+<link rel="import" href="/bower_components/polymer/polymer.html">
+<link rel="import" href="/public/client-data.html">
+<link rel="import" href="/public/client-panel.html">
+
+<polymer-element name="clients-catagory">
+  <template>
+    <client-data clients="{{clients}}"> </client-data>
+    <template repeat="{{client in clients}}">
+      <client-panel client="{{client}}"></client-panel>
+    </template>
+  </template>
+  <script>
+    Polymer({
+      is: function(){
+        return "fdsaf";
+      },
+    });
+  </script>
+</polymer-element>

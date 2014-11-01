@@ -30,6 +30,8 @@ func wayland() {
 		return
 	}
 
+	event_loop = C.wl_display_get_event_loop(display)
+
 	compositorInit(display)
 
 	shmInit(display)
@@ -40,7 +42,6 @@ func wayland() {
 
 	xdgShellInit(display)
 
-	event_loop = C.wl_display_get_event_loop(display)
 
 	fmt.Println("Wayland chrome")
 	println("start running...")
