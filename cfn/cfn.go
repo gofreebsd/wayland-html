@@ -1,4 +1,4 @@
-package main
+package cfn
 
 /*
 #cgo pkg-config: libffi
@@ -114,6 +114,10 @@ type CFn struct {
 	fn_data *FuncData
 }
 
+func (cfn *CFn) CPtr() unsafe.Pointer {
+	return cfn.fn_ptr
+}
+
 func ffi_type(t reflect.Type) *C.ffi_type {
 
 	switch t.Kind() {
@@ -225,8 +229,10 @@ func create_func(f interface{}) *CFn {
 
 }
 
-
 func free_cfn(cfn *CFn) {
 	C.ffi_closure_free(cfn.closure)
 }
 
+func CreateFunc(f interface{}) *CFn {
+	return create_func(f)
+}

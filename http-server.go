@@ -19,7 +19,7 @@ func http() {
 
 	server.Use(render.Renderer(render.Options{
 		Extensions: []string{".tmpl", ".html"},
-		Delims: render.Delims{"{[{", "}]}"},
+		Delims:     render.Delims{"{[{", "}]}"},
 	}))
 
 	server.Get("/", func(r render.Render) {
@@ -38,7 +38,6 @@ func http() {
 	server.Get("/api/clients", func(r render.Render) {
 		client_info := ja{}
 
-
 		for _, c := range compositors {
 			var surfaces []Surface
 
@@ -48,7 +47,7 @@ func http() {
 
 			client_info = append(client_info, jd{
 				"pid": c.Pid,
-				"ss": surfaces,
+				"ss":  surfaces,
 			})
 		}
 

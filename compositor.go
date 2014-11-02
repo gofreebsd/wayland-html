@@ -10,7 +10,7 @@ import "C"
 import (
 	"bytes"
 	_ "fmt"
-	"reflect"
+	"github.com/fangyuanziti/wayland-html/cfn"
 	_ "time"
 	"unsafe"
 )
@@ -28,7 +28,7 @@ type Compositor struct {
 
 var new_surface_signal C.struct_wl_signal
 
-var surface_destroy = create_func(
+var surface_destroy = cfn.CreateFunc(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource) {
 		println("surface_destroy")
@@ -36,7 +36,7 @@ var surface_destroy = create_func(
 	},
 )
 
-var attach = create_func(
+var attach = cfn.CreateFunc(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource,
 		buffer *C.struct_wl_resource,
@@ -50,11 +50,11 @@ var attach = create_func(
 	},
 )
 
-var damage = create_func(
+var damage = cfn.CreateFunc(
 	get_echo("damage"),
 )
 
-var frame = create_func(
+var frame = cfn.CreateFunc(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource,
 		id C.uint32_t) {
@@ -76,7 +76,7 @@ var frame = create_func(
 )
 
 func argbToRgba(buf []byte) []byte {
-	// new_buffer := make([]byte, len(buffer))
+
 	buffer := bytes.NewBuffer(buf)
 	new_buffer := new(bytes.Buffer)
 
@@ -100,9 +100,10 @@ func argbToRgba(buf []byte) []byte {
 	}
 
 	return new_buffer.Bytes()
+
 }
 
-var commit = create_func(
+var commit = cfn.CreateFunc(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource) {
 
@@ -132,14 +133,14 @@ var commit = create_func(
 )
 
 var surface_impl = C.struct_wl_surface_interface{
-	destroy: cPtr(surface_destroy.fn_ptr),
-	attach:  cPtr(attach.fn_ptr),
-	damage:  cPtr(damage.fn_ptr),
-	frame:   cPtr(frame.fn_ptr),
-	commit:  cPtr(commit.fn_ptr),
+	destroy: cPtr(surface_destroy.CPtr()),
+	attach:  cPtr(attach.CPtr()),
+	damage:  cPtr(damage.CPtr()),
+	frame:   cPtr(frame.CPtr()),
+	commit:  cPtr(commit.CPtr()),
 }
 
-var create_surface = create_func(
+var create_surface = cfn.CreateFunc(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource, id C.uint32_t) {
 
@@ -160,7 +161,7 @@ var create_surface = create_func(
 	},
 )
 
-var create_region = create_func(
+var create_region = cfn.CreateFunc(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource, id C.uint32_t) {
 		println("region")
@@ -168,8 +169,8 @@ var create_region = create_func(
 )
 
 var compositor_impl = C.struct_wl_compositor_interface{
-	create_surface: (cPtr)(create_surface.fn_ptr),
-	create_region:  (cPtr)(create_region.fn_ptr),
+	create_surface: (cPtr)(create_surface.CPtr()),
+	create_region:  (cPtr)(create_region.CPtr()),
 }
 
 func (c *Compositor) resetFrameCallback() {
@@ -185,7 +186,7 @@ func (c *Compositor) resetFrameCallback() {
 
 var compositors = make(map[*C.struct_wl_client]*Compositor)
 
-var bind_compositor = create_func(
+var bind_compositor = cfn.CreateFunc(
 	func(client *C.struct_wl_client, data unsafe.Pointer,
 		version C.int, id C.uint32_t) {
 
@@ -215,37 +216,11 @@ var bind_compositor = create_func(
 		C.wl_resource_set_implementation(resource,
 			unsafe.Pointer(&compositor_impl),
 			unsafe.Pointer(compositors[client]),
-			cPtr(destroy.fn_ptr))
+			cPtr(destroy.CPtr()))
 
 		timer.start(compositors[client])
 	},
 )
-
-var once_funcs = make(map[*interface{}]*CFn)
-
-func once_func(f interface{}) *CFn {
-
-	var wrapperFn interface{}
-
-	wrapperFn = reflect.MakeFunc(
-		reflect.TypeOf(f),
-		func(args []reflect.Value) (results []reflect.Value) {
-			results = reflect.ValueOf(f).Call(args)
-
-			if &wrapperFn != nil {
-				delete(once_funcs, &wrapperFn)
-			}
-
-			return
-		},
-	).Interface()
-
-	cfn := create_func(wrapperFn)
-
-	once_funcs[&wrapperFn] = cfn
-
-	return cfn
-}
 
 type RepeatTimer struct {
 	timer   *C.struct_wl_event_source
@@ -271,7 +246,7 @@ func (t *RepeatTimer) start(compositor *Compositor) {
 		}
 	})
 
-	t.timer = C.wl_event_loop_add_timer(event_loop, cPtr(timer_tick.fn_ptr), nil)
+	t.timer = C.wl_event_loop_add_timer(event_loop, cPtr(timer_tick.CPtr()), nil)
 	C.wl_event_source_timer_update(t.timer, 3*1000)
 }
 
@@ -281,7 +256,7 @@ func compositorInit(display *C.struct_wl_display) {
 		&C.wl_compositor_interface,
 		3,
 		nil,
-		cPtr(bind_compositor.fn_ptr))
+		cPtr(bind_compositor.CPtr()))
 
 	C.wl_signal_init(&new_surface_signal)
 }

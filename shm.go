@@ -10,6 +10,7 @@ import "C"
 
 import (
 	"fmt"
+	"github.com/fangyuanziti/wayland-html/cfn"
 	"syscall"
 	"unsafe"
 )
@@ -17,14 +18,14 @@ import (
 type Pool struct {
 	client    *C.struct_wl_client
 	id        int
-	destroyFn *CFn
+	destroyFn *cfn.CFn
 	fd        int
 	ptr       []byte
 }
 
 func (pool *Pool) get_destroy_func() unsafe.Pointer {
 	if pool.destroyFn == nil {
-		pool.destroyFn = create_func(
+		pool.destroyFn = cfn.CreateFunc(
 			func(resource *C.struct_wl_resource) {
 				id := C.wl_resource_get_id(resource)
 				delete(pools, int(id))
@@ -32,55 +33,59 @@ func (pool *Pool) get_destroy_func() unsafe.Pointer {
 		)
 	}
 
-	return pool.destroyFn.fn_ptr
+	return pool.destroyFn.CPtr()
 }
 
 var pools = make(map[int]*Pool)
 
-var create_pool = create_func(
-	func(client *C.struct_wl_client,
-		resource *C.struct_wl_resource,
-		id C.uint32_t,
-		fd C.int32_t,
-		size C.int32_t) {
+var shm_create_pool = cfn.CreateFunc(func(
+	client *C.struct_wl_client,
+	resource *C.struct_wl_resource,
+	id C.uint32_t,
+	fd C.int32_t,
+	size C.int32_t) {
 
-		println("creata_pool")
+	println("creata_pool")
 
-		pool_res := C.wl_resource_create(
-			client,
-			&C.wl_shm_pool_interface,
-			(C.wl_resource_get_version(resource)),
-			id,
-		)
+	mmap_ptr, err := syscall.Mmap(
+		int(fd), 0,
+		int(size),
+		syscall.PROT_READ|syscall.PROT_WRITE,
+		syscall.MAP_SHARED,
+	)
 
-		mmap_ptr, err := syscall.Mmap(
-			int(fd), 0,
-			int(size),
-			syscall.PROT_READ|syscall.PROT_WRITE,
-			syscall.MAP_SHARED,
-		)
+	if err != nil {
+		fmt.Println(err)
+		// TODO: should send error
+	}
 
-		if err != nil {
-			fmt.Println(err)
-		}
+	pool_res := C.wl_resource_create(
+		client,
+		&C.wl_shm_pool_interface,
+		(C.wl_resource_get_version(resource)),
+		id,
+	)
 
-		pool := Pool{client: client, id: int(id),
-			fd: int(fd), ptr: mmap_ptr,
-		}
 
-		pools[int(id)] = &pool
+	pool := Pool{
+		client: client,
+		id:     int(id),
+		fd:     int(fd),
+		ptr:    mmap_ptr,
+	}
 
-		// C.wl_resource_set_implementation(pool_res,
-		// 	(unsafe.Pointer)(&shm_pool_impl),
-		// 	unsafe.Pointer(&pool),
-		// 	cPtr(pool.get_destroy_func()))
-		C.wl_resource_set_implementation(pool_res,
-			(unsafe.Pointer)(&shm_pool_impl),
-			unsafe.Pointer(&pool),
-			nil)
+	pools[int(id)] = &pool
 
-	},
-)
+	// C.wl_resource_set_implementation(pool_res,
+	// 	(unsafe.Pointer)(&shm_pool_impl),
+	// 	unsafe.Pointer(&pool),
+	// 	cPtr(pool.get_destroy_func()))
+	C.wl_resource_set_implementation(pool_res,
+		(unsafe.Pointer)(&shm_pool_impl),
+		unsafe.Pointer(&pool),
+		nil)
+
+})
 
 type Buffer struct {
 	offset int
@@ -93,104 +98,127 @@ type Buffer struct {
 
 var buffers = make(map[*C.struct_wl_resource]*Buffer)
 
-var create_buffer = create_func(
-	func(client *C.struct_wl_client,
-		resource *C.struct_wl_resource,
-		id C.uint32_t,
-		offset C.int32_t,
-		width C.int32_t,
-		height C.int32_t,
-		stride C.int32_t,
-		format C.uint32_t) {
+var shm_pool_create_buffer = cfn.CreateFunc(func(
+	client *C.struct_wl_client,
+	resource *C.struct_wl_resource,
+	id C.uint32_t,
+	offset C.int32_t,
+	width C.int32_t,
+	height C.int32_t,
+	stride C.int32_t,
+	format C.uint32_t) {
 
-		buffer := C.wl_resource_create(
-			client,
-			&C.wl_buffer_interface,
-			(C.wl_resource_get_version(resource)),
-			id,
-		)
+	buffer := C.wl_resource_create(
+		client,
+		&C.wl_buffer_interface,
+		(C.wl_resource_get_version(resource)),
+		id,
+	)
 
-		pool := (*Pool)(C.wl_resource_get_user_data(resource))
+	pool := (*Pool)(C.wl_resource_get_user_data(resource))
 
-		buffer_data := Buffer{
-			offset: int(offset),
-			width:  int(width),
-			height: int(height),
-			stride: int(stride),
-			format: uint(offset),
-			pool:   pool,
-		}
+	buffer_data := Buffer{
+		offset: int(offset),
+		width:  int(width),
+		height: int(height),
+		stride: int(stride),
+		format: uint(offset),
+		pool:   pool,
+	}
 
-		buffers[buffer] = &buffer_data
+	buffers[buffer] = &buffer_data
 
-		C.wl_resource_set_implementation(buffer,
-			(unsafe.Pointer)(&buffer_impl),
-			unsafe.Pointer(&buffer_data),
-			nil)
-	},
-)
+	C.wl_resource_set_implementation(buffer,
+		(unsafe.Pointer)(&buffer_impl),
+		unsafe.Pointer(&buffer_data),
+		nil)
+})
 
-var destroy = create_func(
-	func(client *C.struct_wl_client,
-		resource *C.struct_wl_resource) {
-		println("destroy")
-		C.wl_resource_destroy(resource)
-	},
-)
+var shm_pool_destroy = cfn.CreateFunc(func(
+	client *C.struct_wl_client,
+	resource *C.struct_wl_resource) {
+	println("destroy")
+	// TODO: implement
+	C.wl_resource_destroy(resource)
+})
 
-var resize = create_func(
-	func(client *C.struct_wl_client,
-		resource *C.struct_wl_resource,
-		size C.int32_t) {
-		println("resize")
-	},
-)
+var shm_pool_resize = cfn.CreateFunc(func(
+	client *C.struct_wl_client,
+	resource *C.struct_wl_resource,
+	size C.int32_t) {
 
-var buffer_destroy = create_func(
-	func(client *C.struct_wl_client,
-		resource *C.struct_wl_resource) {
-		println("buffer_destroy")
-		C.wl_resource_destroy(resource)
-	},
-)
+	pool := (*Pool)(C.wl_resource_get_user_data(resource))
+
+	// ummap old mapped memory
+	syscall.Munmap(pool.ptr)
+
+	// map fd with new size
+	mmap_ptr, err := syscall.Mmap(
+		int(pool.fd), 0,
+		int(size),
+		syscall.PROT_READ|syscall.PROT_WRITE,
+		syscall.MAP_SHARED,
+	)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	// keep the reference of memory ptr
+	pool.ptr = mmap_ptr
+	println("resize")
+})
+
+var buffer_destroy = cfn.CreateFunc(func(
+	client *C.struct_wl_client,
+	resource *C.struct_wl_resource) {
+	println("buffer_destroy")
+	// TODO: implement
+	C.wl_resource_destroy(resource)
+})
 
 var shm_impl = C.struct_wl_shm_interface{
-	create_pool: (cPtr)(create_pool.fn_ptr),
+	create_pool: (cPtr)(shm_create_pool.CPtr()),
 }
 
 var shm_pool_impl = C.struct_wl_shm_pool_interface{
-	create_buffer: (cPtr)(create_buffer.fn_ptr),
-	destroy:       (cPtr)(destroy.fn_ptr),
-	resize:        (cPtr)(resize.fn_ptr),
+	create_buffer: (cPtr)(shm_pool_create_buffer.CPtr()),
+	destroy:       (cPtr)(shm_pool_destroy.CPtr()),
+	resize:        (cPtr)(shm_pool_resize.CPtr()),
 }
 
 var buffer_impl = C.struct_wl_buffer_interface{
-	destroy: (cPtr)(buffer_destroy.fn_ptr),
+	destroy: (cPtr)(buffer_destroy.CPtr()),
 }
 
-var bind_shm = create_func(
+func fixVersion(version C.int, implVersion C.int) C.int {
+	if version >= implVersion {
+		return implVersion
+	} else {
+		return version
+	}
+}
 
-	func(client *C.struct_wl_client, data unsafe.Pointer,
-		version C.int, id C.uint32_t) {
+var bind_shm = cfn.CreateFunc(func(
+	client *C.struct_wl_client,
+	data unsafe.Pointer,
+	version C.int, id C.uint32_t) {
 
-		if version >= 1 {
-			version = 1
-		}
+	version = fixVersion(version, 1)
 
-		println("shm", int(id))
+	println("shm", int(id))
 
-		resource := C.wl_resource_create(client, &C.wl_shm_interface, version, id)
-		C.wl_resource_set_implementation(resource,
-			(unsafe.Pointer)(&shm_impl),
-			nil,
-			nil)
+	resource := C.wl_resource_create(client, &C.wl_shm_interface, version, id)
+	C.wl_resource_set_implementation(resource,
+		(unsafe.Pointer)(&shm_impl),
+		nil,
+		nil)
 
-		C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_RGBA8888)
-		C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_XRGB8888)
-		C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_ARGB8888)
+	C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_RGBA8888)
+	C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_XRGB8888)
+	C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_ARGB8888)
 
-	},
-)
+})
 
 func shmInit(display *C.struct_wl_display) {
 
@@ -198,5 +226,5 @@ func shmInit(display *C.struct_wl_display) {
 		&C.wl_shm_interface,
 		1,
 		nil,
-		cPtr(bind_shm.fn_ptr))
+		cPtr(bind_shm.CPtr()))
 }

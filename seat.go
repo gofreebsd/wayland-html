@@ -9,6 +9,7 @@ package main
 import "C"
 
 import (
+	"github.com/fangyuanziti/wayland-html/cfn"
 	"unsafe"
 )
 
@@ -41,15 +42,15 @@ func bind_seat(client *C.struct_wl_client, data unsafe.Pointer,
 
 }
 
-var seat *CFn
+var seat *cfn.CFn
 
 func seatInit(display *C.struct_wl_display) {
 
-	seat = create_func(bind_seat)
+	seat = cfn.CreateFunc(bind_seat)
 
 	C.wl_global_create(display,
 		&C.wl_seat_interface,
 		3,
 		nil,
-		cPtr(seat.fn_ptr))
+		cPtr(seat.CPtr()))
 }

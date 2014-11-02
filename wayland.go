@@ -14,8 +14,6 @@ import (
 type wl_client C.struct_wl_client
 type wl_resource C.struct_wl_resource
 
-
-
 var display *C.struct_wl_display
 var event_loop *C.struct_wl_event_loop
 
@@ -41,8 +39,7 @@ func wayland() {
 	shellInit(display)
 
 	xdgShellInit(display)
-
-
+	
 	fmt.Println("Wayland chrome")
 	println("start running...")
 

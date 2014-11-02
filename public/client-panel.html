@@ -1,7 +1,6 @@
 <link rel="import" href="/bower_components/polymer/polymer.html">
 <script src="/public/webgl-utils.js"></script>
 
-
 <polymer-element name="client-panel" attributes="client">
   <template>
     <div> {{client.pid}} </div>
@@ -64,27 +63,38 @@
 
     Polymer({
       ready: function() {
-        console.log("hello2");
+
         this.buffer = this.client.ss[0].CommitBuffer;
+        function str2ab(str) {
+          var bufView = new Uint8Array(str.length);
+          for (var i=0, strLen=str.length; i < strLen; i++) {
+            bufView[i] = str.charCodeAt(i);
+          }
+          return bufView;
+        }
+
+        this.buffer = str2ab(atob(this.buffer));
+        console.log(this.buffer.length);
       },
 
      domReady: function (){
-        console.log("hello");
+
         this.gl = this.initWebGL(this.$.glcanvas);
         var gl = this.gl;
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(gl.LEQUAL);
         gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-        var image = new Image();
+
         var glcanvas = this.$.glcanvas;
-        var render = this.render;
+
         // setup a GLSL program
         var vertexShader = createShaderFromScriptElement(gl, this.$.vertex_shader);
         var fragmentShader = createShaderFromScriptElement(gl, this.$.fragment_shader);
         var program = createProgram(gl, [vertexShader, fragmentShader]);
 
-        render(gl, this.buffer,glcanvas, program);
+
+        this.render(gl, this.buffer,glcanvas, program);
      },
       render: function(gl, image, canvas, program) {
 
@@ -116,19 +126,9 @@
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        var pixels = new Uint8Array(16*16*4); // 16x16 RGBA image
 
-        function str2ab(str) {
-          var bufView = new Uint8Array(str.length);
-          for (var i=0, strLen=str.length; i < strLen; i++) {
-            bufView[i] = str.charCodeAt(i);
-          }
-          return bufView;
-        }
 
-        buffer = str2ab(atob(image));
-        console.log(buffer.length);
-        console.log(buffer)
+        buffer = image;
 
         gl.texImage2D(
           gl.TEXTURE_2D, // target

@@ -5,15 +5,11 @@
 <polymer-element name="clients-catagory">
   <template>
     <client-data clients="{{clients}}"> </client-data>
-    <template repeat="{{client in clients}}">
+    <template repeat="{{client in clients}}" unresolved>
       <client-panel client="{{client}}"></client-panel>
     </template>
   </template>
   <script>
-    Polymer({
-      is: function(){
-        return "fdsaf";
-      },
-    });
+    Polymer();
   </script>
 </polymer-element>
