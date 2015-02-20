@@ -4,7 +4,7 @@ package main
 #cgo pkg-config: wayland-server
 
 #include <wayland-server.h>
-
+#include "wayland-fix.h"
 */
 import "C"
 
@@ -67,7 +67,7 @@ var get_shell_surface = cfn.CreateFunc(
 		surface_resource *C.struct_wl_resource) {
 		println("get_shell_surface")
 		shell_surface_res := C.wl_resource_create(client,
-			&C.wl_shell_surface_interface,
+			C.WL_shell_surface_interface,
 			C.wl_resource_get_version(resource),
 			id)
 		C.wl_resource_set_implementation(
@@ -90,7 +90,7 @@ var bind_shell = cfn.CreateFunc(
 			version = 1
 		}
 
-		resource := C.wl_resource_create(client, &C.wl_shell_interface, version, id)
+		resource := C.wl_resource_create(client, C.WL_shell_interface, version, id)
 
 		C.wl_resource_set_implementation(
 			resource,
@@ -103,7 +103,7 @@ var bind_shell = cfn.CreateFunc(
 func shellInit(display *C.struct_wl_display) {
 
 	C.wl_global_create(display,
-		&C.wl_shell_interface,
+		C.WL_shell_interface,
 		1,
 		nil,
 		cPtr(bind_shell.CPtr()))

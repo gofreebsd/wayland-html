@@ -1,9 +1,7 @@
 package main
 
 /*
-#cgo pkg-config: wayland-server
-
-#include <wayland-server.h>
+#include "wayland-fix.h"
 */
 import "C"
 
@@ -62,7 +60,7 @@ var frame = cfn.CreateFunc(
 		println("frame")
 
 		callback_resource := C.wl_resource_create(client,
-			&C.wl_callback_interface,
+			C.WL_callback_interface,
 			1, id)
 
 		C.wl_resource_set_implementation(callback_resource,
@@ -194,7 +192,7 @@ var bind_compositor = cfn.CreateFunc(
 			version = 3
 		}
 
-		resource := C.wl_resource_create(client, &C.wl_compositor_interface, version, id)
+		resource := C.wl_resource_create(client, C.WL_compositor_interface, version, id)
 
 		timer := NewRepeatTimer()
 
@@ -253,7 +251,7 @@ func (t *RepeatTimer) start(compositor *Compositor) {
 func compositorInit(display *C.struct_wl_display) {
 
 	C.wl_global_create(display,
-		&C.wl_compositor_interface,
+		C.WL_compositor_interface,
 		3,
 		nil,
 		cPtr(bind_compositor.CPtr()))

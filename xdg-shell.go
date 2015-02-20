@@ -1,10 +1,7 @@
 package main
 
 /*
-
-#include <wayland-server.h>
-#include "xdg-shell-server-protocol.h"
-
+#include "wayland-fix.h"
 */
 import "C"
 
@@ -151,7 +148,7 @@ var get_xdg_surface = cfn.CreateFunc(
 		id C.uint32_t,
 		surface *C.struct_wl_resource) {
 
-		surface_res := C.wl_resource_create(client, &C.xdg_surface_interface,
+		surface_res := C.wl_resource_create(client, C.WL_xdg_surface_interface,
 			C.wl_resource_get_version(resource), id)
 
 		println("get_xdg_surface", int(id))

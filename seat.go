@@ -1,10 +1,7 @@
 package main
 
 /*
-#cgo pkg-config: wayland-server
-
-#include <wayland-server.h>
-
+#include "wayland-fix.h"
 */
 import "C"
 
@@ -26,7 +23,7 @@ func bind_seat(client *C.struct_wl_client, data unsafe.Pointer,
 		version = 2
 	}
 
-	resource := C.wl_resource_create(client, &C.wl_seat_interface, version, id)
+	resource := C.wl_resource_create(client, C.WL_seat_interface, version, id)
 
 	C.wl_resource_set_implementation(
 		resource,
@@ -49,7 +46,7 @@ func seatInit(display *C.struct_wl_display) {
 	seat = cfn.CreateFunc(bind_seat)
 
 	C.wl_global_create(display,
-		&C.wl_seat_interface,
+		C.WL_seat_interface,
 		3,
 		nil,
 		cPtr(seat.CPtr()))

@@ -1,9 +1,7 @@
 package main
 
 /*
-#cgo pkg-config: wayland-server
-
-#include <wayland-server.h>
+#include "wayland-fix.h"
 
 */
 import "C"
