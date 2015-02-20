@@ -152,7 +152,7 @@ func ffi_type(t reflect.Type) *C.ffi_type {
 	}
 }
 
-func get_args_define(types []reflect.Type, argsNum int) **C.struct__ffi_type {
+func get_args_define(types []reflect.Type, argsNum int) **C.ffi_type {
 	if argsNum <= 0 {
 		return nil
 	}
