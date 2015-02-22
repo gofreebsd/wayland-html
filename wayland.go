@@ -17,7 +17,7 @@ type wl_resource C.struct_wl_resource
 var display *C.struct_wl_display
 var event_loop *C.struct_wl_event_loop
 
-func wayland() {
+func initDisplay() (display *C.struct_wl_display) {
 	display = C.wl_display_create()
 
 	if display == nil {
@@ -27,6 +27,11 @@ func wayland() {
 	if C.wl_display_add_socket(display, nil) != 0 {
 		return
 	}
+	return display
+}
+
+func wayland() {
+	display = initDisplay()
 
 	event_loop = C.wl_display_get_event_loop(display)
 
@@ -39,7 +44,9 @@ func wayland() {
 	shellInit(display)
 
 	xdgShellInit(display)
-	
+
+	xserverInit(display)
+
 	fmt.Println("Wayland chrome")
 	println("start running...")
 
