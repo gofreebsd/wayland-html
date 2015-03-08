@@ -64,7 +64,12 @@
     Polymer({
       ready: function() {
 
-        this.buffer = this.client.ss[0].CommitBuffer;
+        var buffer = null;
+        for(var s in this.client.ss) {
+          if (s.CommitBuffer!=null) {
+             buffer = s.CommitBuffer;
+          }
+        }
         function str2ab(str) {
           var bufView = new Uint8Array(str.length);
           for (var i=0, strLen=str.length; i < strLen; i++) {
@@ -73,7 +78,7 @@
           return bufView;
         }
 
-        this.buffer = str2ab(atob(this.buffer));
+        this.buffer = str2ab(atob(buffer));
         console.log(this.buffer.length);
       },
 
@@ -161,12 +166,12 @@
       },
       initWebGL: function initWebGL(canvas) {
         this.gl = null;
-        
+
         try {
           this.gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
         }
         catch(e) {}
-        
+
         if (!this.gl) {
           console.log("Unable to initialize WebGL. Your browser may not support it.");
         }

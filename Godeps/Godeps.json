@@ -1,11 +1,19 @@
 {
 	"ImportPath": "github.com/fangyuanziti/wayland-html",
-	"GoVersion": "go1.2.1",
+	"GoVersion": "go1.4.1",
 	"Deps": [
 		{
 			"ImportPath": "code.google.com/p/go.net/websocket",
 			"Comment": "null-240",
 			"Rev": "937a34c9de13c766c814510f76bca091dee06028"
+		},
+		{
+			"ImportPath": "github.com/BurntSushi/xgb",
+			"Rev": "5d8118d8abc94eff8e9723a5b5ad15e8310560a3"
+		},
+		{
+			"ImportPath": "github.com/BurntSushi/xgbutil",
+			"Rev": "14fbaa6de5943ccef0db04a86445b5c931554695"
 		},
 		{
 			"ImportPath": "github.com/codegangsta/inject",
@@ -28,6 +36,10 @@
 		{
 			"ImportPath": "github.com/oxtoacart/bpool",
 			"Rev": "89c3c7319abbd041bc0a83bdf10bcb8bd445287b"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/unix",
+			"Rev": "28779c6daddbd86e5286abf21ad66ad9b02de278"
 		},
 		{
 			"ImportPath": "gopkg.in/check.v1",

@@ -213,8 +213,8 @@ var bind_shm = cfn.CreateFunc(func(
 		nil)
 
 	C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_RGBA8888)
-	C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_XRGB8888)
-	C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_ARGB8888)
+	// C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_XRGB8888)
+	// C.wl_shm_send_format(resource, C.WL_SHM_FORMAT_ARGB8888)
 
 })
 

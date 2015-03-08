@@ -8,13 +8,13 @@ import (
 	"fmt"
 	_ "github.com/fangyuanziti/wayland-html/cfn"
 	"github.com/nightlyone/lockfile"
+	"golang.org/x/sys/unix"
 	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strconv"
 	"syscall"
-	// "golang.org/x/sys/unix"
 )
 
 var LOCK_FMT string = "/tmp/.X%d-lock"
@@ -47,11 +47,12 @@ func TryLock() (int, lockfile.Lockfile) {
 	}
 }
 
-func initXwm() {
+func initXwm(fd uintptr) {
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGUSR1)
 	go func() {
 		<-sigc
+		xwmInit(fd)
 	}()
 }
 
@@ -73,6 +74,19 @@ func listen(path string) (*net.UnixListener, error) {
 	return unixListener, nil
 }
 
+func listen2(path string) int{
+	_, err := os.Stat(path)
+	if err == nil {
+		os.Remove(path)
+	}
+	fd, _ := syscall.Socket(syscall.AF_LOCAL,
+		syscall.SOCK_STREAM | syscall.SOCK_CLOEXEC, 0)
+	addr := &syscall.SockaddrUnix{Name: path}
+	syscall.Bind(fd, addr)
+	syscall.Listen(fd, 1)
+	return fd
+}
+
 var SOCKET_FMT string = "/tmp/.X11-unix/X"
 
 func forkXWayland() uintptr {
@@ -83,6 +97,13 @@ func forkXWayland() uintptr {
 	return ret
 }
 
+func unsetCloseOnExec(fd int) {
+	_, _, err := syscall.Syscall(syscall.SYS_FCNTL, (uintptr)(fd), syscall.F_SETFD, 0)
+	if err != syscall.Errno(0x0) {
+		panic(err)
+	}
+}
+
 func xserverInit(display *C.struct_wl_display) {
 	// Fetch a valid lock file and DISPLAY number
 	displayNum, _ := TryLock()
@@ -90,19 +111,7 @@ func xserverInit(display *C.struct_wl_display) {
 	// Set DISPLAY number
 	displayName := ":" + numStr
 	os.Setenv("DISPLAY", displayName)
-
-	// init xwm
-	initXwm()
-
-	// init DISPLAY unix socket
-	unixListener, _ := listen(SOCKET_FMT + numStr)
-	abstructListener, _ := listen("@" + SOCKET_FMT + numStr)
-	// do not close the listener(Close them will remove the file in filesystem).
-
-	unixFile, _ := unixListener.File()
-	abstructFile, _ := abstructListener.File()
-	unixFd := unixFile.Fd()
-	abstructFd := abstructFile.Fd()
+	println(displayName)
 
 	// Open a socket for the Wayland connection from Xwayland.
 	wls, _ := syscall.Socketpair(syscall.AF_UNIX,
@@ -111,17 +120,39 @@ func xserverInit(display *C.struct_wl_display) {
 	wms, _ := syscall.Socketpair(syscall.AF_UNIX,
 		syscall.SOCK_STREAM, 0)
 
+	initXwm((uintptr)(wms[0]))
+
 	client := C.wl_client_create(display, (C.int)(wls[0]))
+
 	println(client)
+	unixFd := listen2(SOCKET_FMT + numStr)
+	abstructFd := listen2("@" + SOCKET_FMT + numStr)
+
+	unsetCloseOnExec(unixFd)
+	unsetCloseOnExec(abstructFd)
 
 	pid := forkXWayland()
 	if pid == 0 { // child
-		// unix.Close(wls[0])
-		// unix.Close(wls[1])
+
+		unix.Close(wls[0])
+		unix.Close(wms[0])
+
+		// init DISPLAY unix socket
+		// do not close the listener(Close them will remove the file in filesystem).
+		// unixListener, _ := listen(SOCKET_FMT + numStr)
+		// abstructListener, _ := listen("@" + SOCKET_FMT + numStr)
+
+		// unixFile, _ := unixListener.File()
+		// abstructFile, _ := abstructListener.File()
+
+		// unixFd := unixFile.Fd()
+		// abstructFd := abstructFile.Fd()
+
 		C.signal_ignore((C.int)(syscall.SIGUSR1))
 		os.Setenv("WAYLAND_SOCKET", strconv.Itoa(wls[1]))
 		args := []string{
 			"Xwayland",
+			displayName,
 			"-rootless",
 			"-terminate",
 			"-listen", strconv.Itoa((int)(unixFd)),
@@ -130,6 +161,7 @@ func xserverInit(display *C.struct_wl_display) {
 		}
 
 		binary, lookErr := exec.LookPath("Xwayland")
+		// binary, lookErr := exec.LookPath("strace")
 		if lookErr != nil {
 			panic(lookErr)
 		}
@@ -140,9 +172,8 @@ func xserverInit(display *C.struct_wl_display) {
 			panic(lookErr)
 		}
 
-		println(wls[1], wms[1], unixFd, abstructFd)
 	} else { // parent
-
+		unix.Close(wls[1])
+		unix.Close(wms[1])
 	}
-
 }

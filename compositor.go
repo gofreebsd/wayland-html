@@ -7,10 +7,14 @@ import "C"
 
 import (
 	"bytes"
-	_ "fmt"
 	"github.com/fangyuanziti/wayland-html/cfn"
 	_ "time"
 	"unsafe"
+	"image/color"
+	"image"
+	"os"
+	"image/png"
+	"fmt"
 )
 
 type Surface struct {
@@ -100,6 +104,93 @@ func argbToRgba(buf []byte) []byte {
 	return new_buffer.Bytes()
 
 }
+func argbToRgba2(buf []byte, width int, height int, stride int) []color.RGBA{
+
+	buffer := bytes.NewBuffer(buf)
+	colors := make([]color.RGBA, width * height)
+
+	read_buffer := make([]byte, 4)
+	convert_buffer := make([]byte, 4)
+
+	i := 0
+	for i < width * height {
+		_, err := buffer.Read(read_buffer)
+
+		if err != nil {
+			break
+		}
+
+		// ARGB to RGBA
+		//read_buffer  store in little end: BGRA
+
+		convert_buffer[0] = read_buffer[2] // R
+		convert_buffer[1] = read_buffer[1] // G
+		convert_buffer[2] = read_buffer[0] // B
+		convert_buffer[3] = 1 // A
+
+		colors[i] = color.RGBA{
+			R: read_buffer[2],
+			G: read_buffer[1],
+			B: read_buffer[0],
+			A: 255,				// hard code for 255
+		}
+
+		i = i + 1
+
+	}
+	return colors
+
+}
+
+// func toPng(buffer []byte) {
+// 	read := bytes.NewBuffer(buffer)
+// }
+
+type BufferImage struct {
+	buffer *Buffer
+	rgbaBuf []byte
+	colors []color.RGBA
+}
+
+func newBufferImage(buffer *Buffer) (*BufferImage) {
+	img := & BufferImage {
+		buffer: buffer,
+		rgbaBuf: argbToRgba(buffer.pool.ptr[buffer.offset:]),
+		colors: argbToRgba2(buffer.pool.ptr[buffer.offset:], buffer.width,
+			buffer.height,buffer.stride),
+	}
+	fmt.Println(buffer.format, buffer.stride)
+	return img
+}
+
+func (img *BufferImage) ColorModel() color.Model {
+	// hard code for rgba
+	return color.RGBAModel
+}
+
+func (img *BufferImage) Bounds() image.Rectangle {
+	min := image.Point {
+		X:0,
+		Y:0,
+	}
+	max := image.Point {
+		X: img.buffer.width,
+		Y: img.buffer.height,
+	}
+
+	rec := image.Rectangle {
+		Min: min,
+		Max: max,
+	}
+	return rec
+}
+
+func (img *BufferImage) At(x, y int) color.Color {
+	pos := (x+1)*(y+1) - 1
+	color := img.colors[pos]
+	// fmt.Print(color, x, y)
+	return color
+}
 
 var commit = cfn.CreateFunc(
 	func(client *C.struct_wl_client,
@@ -123,6 +214,11 @@ var commit = cfn.CreateFunc(
 		var commitBuffer = make([]byte, size)
 		copy(commitBuffer, pendingBuffer.pool.ptr[pendingBuffer.offset:])
 		surface.CommitBuffer = argbToRgba(commitBuffer)
+
+		img := newBufferImage(pendingBuffer)
+		file, _ := os.Create("./output")
+		defer file.Close()
+		png.Encode(file, img)
 
 		// release pending buffer
 		C.wl_buffer_send_release(surface.pendingBuffer)
@@ -238,7 +334,6 @@ func (t *RepeatTimer) stop() {
 func (t *RepeatTimer) start(compositor *Compositor) {
 	timer_tick := once_func(func() {
 		if !t.is_stop {
-			println("timer", compositor)
 			compositor.resetFrameCallback()
 			t.start(compositor)
 		}
