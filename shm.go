@@ -8,7 +8,10 @@ import "C"
 
 import (
 	"fmt"
+	log "github.com/Sirupsen/logrus"
 	"github.com/fangyuanziti/wayland-html/cfn"
+	"image"
+	"image/color"
 	"syscall"
 	"unsafe"
 )
@@ -64,7 +67,6 @@ var shm_create_pool = cfn.CreateFunc(func(
 		id,
 	)
 
-
 	pool := Pool{
 		client: client,
 		id:     int(id),
@@ -85,6 +87,56 @@ var shm_create_pool = cfn.CreateFunc(func(
 
 })
 
+type WLBufferImage struct {
+	buffer *Buffer
+}
+
+func newBufferImage(buffer *Buffer) *WLBufferImage {
+	img := &WLBufferImage{
+		buffer: buffer,
+	}
+	log.Info(buffer.format, buffer.stride)
+	return img
+}
+
+func (img *WLBufferImage) ColorModel() color.Model {
+	// hard code for rgba
+	return color.RGBAModel
+}
+
+func (img *WLBufferImage) Bounds() image.Rectangle {
+	min := image.Point{
+		X: 0,
+		Y: 0,
+	}
+	max := image.Point{
+		X: img.buffer.width,
+		Y: img.buffer.height,
+	}
+
+	rec := image.Rectangle{
+		Min: min,
+		Max: max,
+	}
+	return rec
+
+}
+
+func (img *WLBufferImage) At(x, y int) color.Color {
+	pointStride := img.buffer.stride / 4
+	pos := axisToPos(x, y, pointStride)
+	// c := img.colors[pos]
+	bufferOffset := pos * 4
+	ptr := img.buffer.pool.ptr[bufferOffset : bufferOffset+4]
+	c := color.RGBA{
+		R: ptr[2],
+		G: ptr[1],
+		B: ptr[0],
+		A: 255, // hard code for 255 (no transparent)
+	}
+	return c
+}
+
 type Buffer struct {
 	offset int
 	width  int
@@ -92,6 +144,11 @@ type Buffer struct {
 	stride int
 	format uint
 	pool   *Pool
+}
+
+func (b *Buffer) Image() *WLBufferImage {
+	img := newBufferImage(b)
+	return img
 }
 
 var buffers = make(map[*C.struct_wl_resource]*Buffer)

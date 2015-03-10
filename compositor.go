@@ -7,14 +7,12 @@ import "C"
 
 import (
 	"bytes"
+	log "github.com/Sirupsen/logrus"
 	"github.com/fangyuanziti/wayland-html/cfn"
+	"image/png"
+	"os"
 	_ "time"
 	"unsafe"
-	"image/color"
-	"image"
-	"os"
-	"image/png"
-	"fmt"
 )
 
 type Surface struct {
@@ -33,7 +31,7 @@ var new_surface_signal C.struct_wl_signal
 var surface_destroy = cfn.CreateFunc(
 	func(client *C.struct_wl_client,
 		resource *C.struct_wl_resource) {
-		println("surface_destroy")
+		log.Info("surface_destroy")
 		C.wl_resource_destroy(resource)
 	},
 )
@@ -45,7 +43,7 @@ var attach = cfn.CreateFunc(
 		x C.int32_t,
 		y C.int32_t) {
 
-		println("attach")
+		log.Info("attach")
 
 		surface := compositors[client].Surfaces[resource]
 		surface.pendingBuffer = buffer
@@ -53,7 +51,20 @@ var attach = cfn.CreateFunc(
 )
 
 var damage = cfn.CreateFunc(
-	get_echo("damage"),
+	func(client *C.struct_wl_client,
+		resource *C.struct_wl_resource,
+		x C.int32_t,
+		y C.int32_t,
+		width C.int32_t,
+		height C.int32_t) {
+
+		log.WithFields(log.Fields{
+			"x":      x,
+			"y":      y,
+			"width":  width,
+			"height": height,
+		}).Info("surface damage")
+	},
 )
 
 var frame = cfn.CreateFunc(
@@ -61,7 +72,7 @@ var frame = cfn.CreateFunc(
 		resource *C.struct_wl_resource,
 		id C.uint32_t) {
 
-		println("frame")
+		log.Info("frame")
 
 		callback_resource := C.wl_resource_create(client,
 			C.WL_callback_interface,
@@ -104,92 +115,10 @@ func argbToRgba(buf []byte) []byte {
 	return new_buffer.Bytes()
 
 }
-func argbToRgba2(buf []byte, width int, height int, stride int) []color.RGBA{
 
-	buffer := bytes.NewBuffer(buf)
-	colors := make([]color.RGBA, width * height)
-
-	read_buffer := make([]byte, 4)
-	convert_buffer := make([]byte, 4)
-
-	i := 0
-	for i < width * height {
-		_, err := buffer.Read(read_buffer)
-
-		if err != nil {
-			break
-		}
-
-		// ARGB to RGBA
-		//read_buffer  store in little end: BGRA
-
-		convert_buffer[0] = read_buffer[2] // R
-		convert_buffer[1] = read_buffer[1] // G
-		convert_buffer[2] = read_buffer[0] // B
-		convert_buffer[3] = 1 // A
-
-		colors[i] = color.RGBA{
-			R: read_buffer[2],
-			G: read_buffer[1],
-			B: read_buffer[0],
-			A: 255,				// hard code for 255
-		}
-
-		i = i + 1
-
-	}
-	return colors
-
-}
-
-// func toPng(buffer []byte) {
-// 	read := bytes.NewBuffer(buffer)
-// }
-
-type BufferImage struct {
-	buffer *Buffer
-	rgbaBuf []byte
-	colors []color.RGBA
-}
-
-func newBufferImage(buffer *Buffer) (*BufferImage) {
-	img := & BufferImage {
-		buffer: buffer,
-		rgbaBuf: argbToRgba(buffer.pool.ptr[buffer.offset:]),
-		colors: argbToRgba2(buffer.pool.ptr[buffer.offset:], buffer.width,
-			buffer.height,buffer.stride),
-	}
-	fmt.Println(buffer.format, buffer.stride)
-	return img
-}
-
-func (img *BufferImage) ColorModel() color.Model {
-	// hard code for rgba
-	return color.RGBAModel
-}
-
-func (img *BufferImage) Bounds() image.Rectangle {
-	min := image.Point {
-		X:0,
-		Y:0,
-	}
-	max := image.Point {
-		X: img.buffer.width,
-		Y: img.buffer.height,
-	}
-
-	rec := image.Rectangle {
-		Min: min,
-		Max: max,
-	}
-	return rec
-}
-
-func (img *BufferImage) At(x, y int) color.Color {
-	pos := (x+1)*(y+1) - 1
-	color := img.colors[pos]
-	// fmt.Print(color, x, y)
-	return color
+func axisToPos(x, y int, stride int) int {
+	pos := y*stride + x
+	return pos
 }
 
 var commit = cfn.CreateFunc(
@@ -207,6 +136,7 @@ var commit = cfn.CreateFunc(
 			buffers[surface.pendingBuffer].stride,
 			buffers[surface.pendingBuffer].format,
 		)
+		log.Info("commit")
 
 		pendingBuffer := buffers[surface.pendingBuffer]
 		size := pendingBuffer.height * pendingBuffer.stride
@@ -215,14 +145,13 @@ var commit = cfn.CreateFunc(
 		copy(commitBuffer, pendingBuffer.pool.ptr[pendingBuffer.offset:])
 		surface.CommitBuffer = argbToRgba(commitBuffer)
 
-		img := newBufferImage(pendingBuffer)
 		file, _ := os.Create("./output")
 		defer file.Close()
-		png.Encode(file, img)
+
+		png.Encode(file, pendingBuffer.Image())
 
 		// release pending buffer
 		C.wl_buffer_send_release(surface.pendingBuffer)
-
 	},
 )
 
